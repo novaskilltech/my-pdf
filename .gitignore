@@ -1,0 +1,10 @@
+node_modules/
+.vercel/
+.env*
+!.env.example
+*.pdf
+*.zip
+private-data/
+test-results/
+public/blob-upload.js
+public/blob-upload.js.map

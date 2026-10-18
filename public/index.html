@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mes PDF · NovaSkillTech</title>
+  <meta name="description" content="Livres, guides et documents PDF publiés par NovaSkillTech, classés par thème.">
+  <meta name="theme-color" content="#203f35"><meta name="robots" content="noindex,nofollow">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="styles.css">
+  <script src="catalog-core.js" defer></script><script src="app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#catalogue">Aller aux documents</a>
+  <div class="shade" id="shade" hidden></div>
+  <aside class="sidebar" id="sidebar" aria-label="Navigation des documents">
+    <a class="brand" href="./" aria-label="Mes PDF, accueil"><span class="brand-mark" data-icon="book"></span><span>mes<span class="brand-serif">pdf.</span><small>NOVASKILLTECH</small></span></a>
+    <button class="close-nav icon-button" id="close-nav" aria-label="Fermer le menu" data-icon="close"></button>
+    <div class="sidebar-label">LA COLLECTION</div>
+    <nav class="main-nav" aria-label="Collection">
+      <button class="nav-item active" id="all-documents"><span data-icon="grid"></span><span>Tous les documents</span><span class="count" id="all-count">—</span></button>
+      <button class="nav-item" id="favorites"><span data-icon="star"></span><span>Mes favoris</span><span class="count" id="fav-count">0</span></button>
+    </nav>
+    <div class="sidebar-label theme-label">PAR THÈME <span id="category-count">—</span></div>
+    <nav id="category-nav" class="category-nav" aria-label="Thèmes des documents"></nav>
+    <div class="sidebar-bottom"><span class="avatar">SE</span><div><strong>Salah Eddine</strong><small>Livres & ressources</small></div><span data-icon="lock"></span></div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar">
+      <div class="topbar-left"><button class="menu-toggle icon-button" id="menu-toggle" aria-label="Ouvrir les catégories" aria-expanded="false" aria-controls="sidebar" data-icon="menu"></button><span class="crumb">Bibliothèque <span>/</span> <strong id="breadcrumb">Tous les documents</strong></span></div>
+      <a class="private" href="/admin"><span data-icon="lock"></span>Administration</a>
+    </header>
+    <main id="main">
+      <div class="intro"><div><p class="eyebrow">LA COLLECTION NOVASKILLTECH</p><h1>Les idées restent.<br><em>Retrouve-les ici.</em></h1><p class="intro-copy">Des livres, guides et documents, réunis par thème.<br class="desktop-break"> À lire, à retrouver et à garder à portée de main.</p></div><div class="collection-stats"><span><strong id="total-stat">—</strong><small>documents PDF</small></span><span><strong id="theme-stat">—</strong><small>thèmes à explorer</small></span></div></div>
+      <section class="featured" id="featured" hidden aria-labelledby="featured-title">
+        <div class="featured-copy"><span class="featured-label"><span class="dot"></span>DERNIER AJOUT À LA COLLECTION</span><p class="featured-kicker">À DÉCOUVRIR</p><h2 id="featured-title"></h2><p></p><button class="light-button" id="featured-open">Lire le PDF <span data-icon="arrow"></span></button><span class="featured-edition"></span></div>
+        <div class="featured-art" aria-hidden="true"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><span class="featured-stamp">LIRE<br><i>apprendre</i><br>TRANSMETTRE</span><img id="featured-cover" alt="" width="208" height="294"></div>
+      </section>
+      <section class="catalogue" id="catalogue" aria-labelledby="catalogue-title">
+        <div class="catalogue-heading"><div><p class="eyebrow">EXPLORER LA COLLECTION</p><h2 id="catalogue-title">Tous les documents <span id="result-count">—</span></h2></div><p class="update-date"></p></div>
+        <div class="toolbar"><div class="search-wrap"><span data-icon="search"></span><label class="sr-only" for="search">Rechercher un document, un auteur ou un sujet</label><input id="search" type="search" placeholder="Un titre, un auteur, un sujet…" autocomplete="off"><kbd>/</kbd></div><div class="toolbar-right"><label class="sr-only" for="sort">Trier les documents</label><select id="sort"><option value="recent">Plus récents</option><option value="oldest">Plus anciens</option><option value="alpha">De A à Z</option><option value="pages">Nombre de pages</option></select><div class="view-controls" role="group" aria-label="Affichage"><button id="grid-view" class="icon-button selected" aria-label="Vue en grille" aria-pressed="true" data-icon="grid"></button><button id="list-view" class="icon-button" aria-label="Vue en liste" aria-pressed="false" data-icon="list"></button></div></div></div>
+        <div class="filter-line"><div id="active-filter">Les documents disponibles à la lecture.</div><button class="text-button" id="reset" hidden>Réinitialiser les filtres <span data-icon="close"></span></button></div>
+        <div id="results" aria-live="polite"><div class="loading">Chargement de la collection…</div></div>
+      </section>
+      <footer><span class="footer-brand">mes<span>pdf.</span></span><p>Sous la direction éditoriale de Salah Eddine Abou Soulaymane<br><span>NovaSkillTech · © 2026 — Tous droits réservés</span></p><a href="#main">Haut de page <span data-icon="up"></span></a></footer>
+    </main>
+  </div>
+  <dialog id="reader" aria-labelledby="reader-title"><div class="reader-header"><div><span class="eyebrow" id="reader-category"></span><h2 id="reader-title"></h2><p id="reader-meta"></p></div><button class="icon-button" id="reader-close" aria-label="Fermer le lecteur" data-icon="close"></button></div><div class="reader-actions"><a id="reader-download" class="primary-button" download><span data-icon="download"></span>Télécharger</a><a id="reader-tab" class="outline-button" target="_blank" rel="noopener">Ouvrir dans un onglet <span data-icon="external"></span></a></div><p class="reader-help">Si l’aperçu ne s’affiche pas sur ton téléphone, ouvre le PDF dans un nouvel onglet.</p><iframe id="reader-frame" title="Aperçu du document PDF"></iframe><details class="file-details"><summary>Nom du fichier original</summary><p id="reader-filename"></p></details></dialog>
+  <noscript><p class="noscript">Active JavaScript pour parcourir les documents et utiliser les filtres.</p></noscript>
+</body>
+</html>

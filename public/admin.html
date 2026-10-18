@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Administration · Mes PDF</title><meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#203f35"><link rel="icon" href="/favicon.svg">
+<link rel="stylesheet" href="/admin.css"><script type="module" src="/admin.js"></script>
+</head>
+<body>
+<header class="header"><a class="brand" href="/">mes<i>pdf.</i><small>NOVASKILLTECH</small></a><div class="header-actions"><a href="/" target="_blank" rel="noopener">Voir le site ↗</a><button id="logout" hidden>Se déconnecter</button></div></header>
+<main>
+<div class="page-heading"><p class="eyebrow">ESPACE ADMINISTRATEUR</p><h1>Une collection.<br><em>À partager à ton rythme.</em></h1><p>Choisis les documents que tes visiteurs peuvent consulter.</p></div>
+<div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+<section id="loading" class="panel">Connexion à ton espace…</section>
+<section id="auth" class="panel auth" hidden aria-labelledby="auth-title">
+<span class="label">ACCÈS PROTÉGÉ</span><h2 id="auth-title">Bienvenue.</h2><p id="auth-help"></p>
+<form id="auth-form">
+<div id="setup-field" hidden><label for="setup-token">Code d’installation</label><input id="setup-token" type="password" autocomplete="off"><small>Le code défini dans les paramètres Vercel du site.</small></div>
+<label for="password">Mot de passe administrateur</label><input id="password" type="password" autocomplete="current-password" maxlength="200" required>
+<div id="confirm-field" hidden><label for="confirm-password">Confirmer le mot de passe</label><input id="confirm-password" type="password" autocomplete="new-password" maxlength="200"></div>
+<button type="submit" class="primary" id="auth-submit">Se connecter</button>
+</form></section>
+<section id="dashboard" hidden>
+<div class="stats"><div><strong id="stat-total">0</strong><span>documents</span></div><div><strong id="stat-public">0</strong><span>visibles au public</span></div><div><strong id="stat-hidden">0</strong><span>masqués</span></div></div>
+<section class="panel collection" aria-labelledby="collection-title">
+<div class="section-title"><div><p class="eyebrow">PUBLICATION</p><h2 id="collection-title">Tes documents</h2></div><button id="refresh" class="subtle">Actualiser</button></div>
+<div class="filters"><label class="search">Rechercher<input id="search" type="search" placeholder="Titre, auteur, nom du fichier…"></label><label>Thème<select id="category"><option value="all">Tous les thèmes</option></select></label><label>Visibilité<select id="visibility"><option value="all">Tous les documents</option><option value="public">Visibles au public</option><option value="hidden">Masqués</option></select></label></div>
+<div class="selection"><label><input type="checkbox" id="select-all"> Sélectionner les résultats</label><span id="selection-count">0 sélectionné</span><div><button id="publish-selection" class="primary" disabled>Publier la sélection</button><button id="hide-selection" disabled>Masquer la sélection</button></div></div>
+<p class="help">Un document masqué reste consultable ici. Son lien public et sa couverture deviennent inaccessibles. Les copies déjà téléchargées restent chez leur destinataire.</p>
+<div class="table-wrap"><table><thead><tr><th><span class="sr-only">Sélection</span></th><th>Document</th><th>Thème</th><th>Visibilité</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody id="documents"></tbody></table></div>
+<div id="empty" class="empty" hidden><h3>Aucun document pour le moment.</h3><p>Importe ton pack de collection ci-dessous pour commencer.</p></div>
+<p id="result-count" class="help"></p>
+</section>
+<div class="settings-grid">
+<section class="panel" aria-labelledby="import-title"><p class="eyebrow">ENRICHIR LA COLLECTION</p><h2 id="import-title">Importer tes PDF</h2><p>Choisis le pack ZIP de la collection. Les nouveaux documents seront masqués jusqu’à leur publication.</p><form id="import-form"><label for="import-file">Pack de collection (.zip, 180 Mo maximum)</label><input id="import-file" type="file" accept=".zip,application/zip" required><button class="primary" id="import-submit" type="submit">Importer la collection</button></form><progress id="import-progress" max="100" value="0" hidden></progress><p id="import-status" role="status" class="help"></p></section>
+<section class="panel" aria-labelledby="security-title"><p class="eyebrow">TON ACCÈS</p><h2 id="security-title">Mot de passe</h2><form id="password-form"><label for="current-password">Mot de passe actuel</label><input id="current-password" type="password" autocomplete="current-password" maxlength="200" required><label for="new-password">Nouveau mot de passe</label><input id="new-password" type="password" autocomplete="new-password" minlength="14" maxlength="200" required><small>14 caractères minimum. Une phrase longue convient.</small><label for="new-password-confirm">Confirmer le nouveau mot de passe</label><input id="new-password-confirm" type="password" autocomplete="new-password" minlength="14" maxlength="200" required><button type="submit">Changer le mot de passe</button></form></section>
+</div>
+</section>
+</main><footer>mespdf. · NovaSkillTech</footer><noscript><p>Active JavaScript pour gérer la collection.</p></noscript>
+</body></html>

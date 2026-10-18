@@ -1,0 +1,23 @@
+{
+  "name": "my-pdf",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "build": "npm run check && npm test && node scripts/build.js",
+    "test": "node --test test/*.test.js",
+    "check": "node --check src/application.js && node --check public/app.js && node --check public/admin.js"
+  },
+  "dependencies": {
+    "@vercel/blob": "2.8.2",
+    "fflate": "0.8.3",
+    "hono": "4.13.13",
+    "iron-session": "9.0.1"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}
