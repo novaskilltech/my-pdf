@@ -95,3 +95,12 @@ export async function addSingleDocument(storage, d) {
   const updatedDocs = [doc, ...existing];
   return storage.writeJson('catalog.json', { categories, documents: updatedDocs, updated: new Date().toISOString() }, current?.etag);
 }
+export async function deleteSingleDocument(storage, id, revision) {
+  const current = await storage.readJson('catalog.json');
+  const clean = e => typeof e === 'string' ? e.replace(/^W\//, '') : e;
+  if (!current || (revision && clean(revision) !== clean(current.etag))) throw new Conflict();
+  const existing = current.data.documents || [];
+  const filtered = existing.filter(d => d.id !== id);
+  if (filtered.length === existing.length) throw new AppError(404, 'Document introuvable.');
+  return storage.writeJson('catalog.json', { ...current.data, documents: filtered, updated: new Date().toISOString() }, current.etag);
+}
