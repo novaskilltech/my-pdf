@@ -6,7 +6,6 @@ node_modules/
 *.zip
 private-data/
 test-results/
-public/blob-upload.js
 data/
 Mes-PDF-Classes/
 Collection-PDF-NovaSkillTech.zip

@@ -47,6 +47,7 @@ export function createApp(options = {}) {
 
   app.get('/',async c=>c.html(await readFile(new URL('../public/index.html',import.meta.url),'utf8')));
   app.get('/admin',async c=>{c.header('Cache-Control','no-store');return c.html(await readFile(new URL('../public/admin.html',import.meta.url),'utf8'));});
+  app.get('/blob-upload.js',async c=>{c.header('Content-Type','application/javascript; charset=utf-8');return c.body(await readFile(new URL('../public/blob-upload.js',import.meta.url),'utf8'));});
   app.get('/api/catalog',async c=>c.json(presentCatalog(await storage.readJson('catalog.json'))));
   app.get('/api/auth/status',async c=>{
     const record=await storage.readJson('auth.json');
