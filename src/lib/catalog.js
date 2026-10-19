@@ -15,7 +15,8 @@ export function presentCatalog(record, admin = false) {
 export async function changeVisibility(storage, ids, visible, revision) {
   if (!Array.isArray(ids) || !ids.length || ids.length > 500 || !ids.every(id => typeof id === 'string') || typeof visible !== 'boolean') throw new AppError(400, 'Sélection invalide.');
   const current = await storage.readJson('catalog.json');
-  if (!current || revision !== current.etag) throw new Conflict();
+  const clean = e => typeof e === 'string' ? e.replace(/^W\//, '') : e;
+  if (!current || !revision || clean(revision) !== clean(current.etag)) throw new Conflict();
   const targets = new Set(ids);
   if (current.data.documents.filter(d => targets.has(d.id)).length !== targets.size) throw new AppError(400, 'Un document de la sélection est introuvable.');
   const data = { ...current.data, updated: new Date().toISOString(), documents: current.data.documents.map(d => targets.has(d.id) ? { ...d, visible } : d) };

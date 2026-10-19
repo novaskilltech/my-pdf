@@ -8,15 +8,20 @@ import { BlobStorage } from './lib/storage.js';
 import { AppError } from './lib/errors.js';
 import { checkOrigin, clearSession, equalSecret, getAdmin, issueSession, newAuthRecord, passwordHash, rateLimit, requireAdmin, validatePassword, verifyPassword } from './lib/auth.js';
 import { changeVisibility, presentCatalog } from './lib/catalog.js';
-import { importArchive, MAX_ARCHIVE } from './lib/import.js';
+import { addSingleDocument, importArchive, importUnpackedCatalog, MAX_ARCHIVE } from './lib/import.js';
 
 export function createApp(options = {}) {
   const storage = options.storage || new BlobStorage();
   const setupToken = options.setupToken ?? process.env.ADMIN_SETUP_TOKEN ?? '';
   const configured = options.configured ?? Boolean(process.env.BLOB_STORE_ID || process.env.BLOB_READ_WRITE_TOKEN);
   const app = new Hono();
+  const requireAdminOrToken = async c => requireAdmin(c, storage);
 
-  app.use('/api/*', bodyLimit({maxSize:65536,onError:()=>{throw new AppError(413,'Requête trop volumineuse.');}}));
+  app.use('/api/admin/catalog-direct', bodyLimit({maxSize:5*1024*1024,onError:()=>{throw new AppError(413,'Catalogue trop volumineux.');}}));
+  app.use('/api/*', async (c,next) => {
+    if (c.req.path === '/api/admin/catalog-direct') return next();
+    return bodyLimit({maxSize:65536,onError:()=>{throw new AppError(413,'Requête trop volumineuse.');}})(c, next);
+  });
   app.use('/api/*', async (c,next) => {
     c.header('Cache-Control','private, no-store, max-age=0');
     c.header('CDN-Cache-Control','no-store');c.header('Vercel-CDN-Cache-Control','no-store');
@@ -24,7 +29,8 @@ export function createApp(options = {}) {
     c.header('X-Frame-Options','SAMEORIGIN');
     if (!configured) throw new AppError(503,'Le stockage privé doit être connecté avant de pouvoir utiliser la collection.');
     if (!['GET','HEAD'].includes(c.req.method)) {
-      if (Number(c.req.header('content-length') || 0)>65536) throw new AppError(413,'Requête trop volumineuse.');
+      const maxLen = c.req.path === '/api/admin/catalog-direct' ? 5 * 1024 * 1024 : 65536;
+      if (Number(c.req.header('content-length') || 0)>maxLen) throw new AppError(413,'Requête trop volumineuse.');
       checkOrigin(c);
     }
     await next();
@@ -71,10 +77,10 @@ export function createApp(options = {}) {
     const record={...current.data,passwordHash:await passwordHash(body.password),version:randomBytes(16).toString('hex'),sessionSecret:randomBytes(48).toString('base64url')};
     await storage.writeJson('auth.json',record,current.etag);await issueSession(c,record);return c.json({ok:true});
   });
-  app.get('/api/admin/catalog',async c=>{await requireAdmin(c,storage);return c.json(presentCatalog(await storage.readJson('catalog.json'),true));});
+  app.get('/api/admin/catalog',async c=>{await requireAdminOrToken(c);return c.json(presentCatalog(await storage.readJson('catalog.json'),true));});
   app.patch('/api/admin/visibility',async c=>{
-    await requireAdmin(c,storage);const {ids,visible}=await c.req.json();
-    const result=await changeVisibility(storage,ids,visible,c.req.header('if-match'));
+    await requireAdminOrToken(c);const {ids,visible,revision}=await c.req.json();
+    const result=await changeVisibility(storage,ids,visible,revision || c.req.header('x-revision') || c.req.header('if-match'));
     return c.json(presentCatalog(result,true));
   });
 
@@ -95,19 +101,24 @@ export function createApp(options = {}) {
     return c.body(file.stream,contentRange?206:200);
   });
   app.post('/api/admin/upload',async c=>{
-    await requireAdmin(c,storage);
+    await requireAdminOrToken(c);
     const body=await c.req.json();
     if(body.type!=='blob.generate-presigned-url')throw new AppError(400,'Demande de transfert invalide.');
     const result=await handleUploadPresigned({body,request:c.req.raw,getSignedToken:async pathname=>{
-      if(!/^my-pdf\/imports\/[a-f0-9-]{36}\.zip$/.test(pathname))throw new AppError(400,'Chemin de transfert invalide.');
-      const constraints={pathname,operations:['put'],allowedContentTypes:['application/zip'],maximumSizeInBytes:MAX_ARCHIVE,validUntil:Date.now()+60*60*1000};
+      const isZip = /^my-pdf\/imports\/[a-f0-9-]{36}\.zip$/.test(pathname);
+      const isPdf = /^my-pdf\/pdf\/[a-f0-9]{20}\.pdf$/.test(pathname);
+      const isCover = /^my-pdf\/covers\/[a-f0-9]{20}\.jpg$/.test(pathname);
+      if(!isZip && !isPdf && !isCover)throw new AppError(400,'Chemin de transfert invalide.');
+      const allowedContentTypes = isZip ? ['application/zip','application/x-zip-compressed'] : isPdf ? ['application/pdf'] : ['image/jpeg'];
+      const maxSize = isZip ? MAX_ARCHIVE : isPdf ? 30 * 1024 * 1024 : 3 * 1024 * 1024;
+      const constraints={pathname,operations:['put'],allowedContentTypes,maximumSizeInBytes:maxSize,validUntil:Date.now()+60*60*1000};
       const token=await issueSignedToken(constraints);
-      return {token,urlOptions:{access:'private',addRandomSuffix:false,allowOverwrite:false,allowedContentTypes:constraints.allowedContentTypes,maximumSizeInBytes:MAX_ARCHIVE}};
+      return {token,urlOptions:{access:'private',addRandomSuffix:false,allowOverwrite:Boolean(isPdf||isCover),allowedContentTypes:constraints.allowedContentTypes,maximumSizeInBytes:maxSize}};
     }});
     return c.json(result);
   });
   app.post('/api/admin/import',async c=>{
-    await requireAdmin(c,storage);await rateLimit(storage,'import',5);
+    await requireAdminOrToken(c);await rateLimit(storage,'import',5);
     const {pathname}=await c.req.json();
     if(typeof pathname!=='string'||!/^my-pdf\/imports\/[a-f0-9-]{36}\.zip$/.test(pathname))throw new AppError(400,'Pack d’import invalide.');
     const file=await storage.readFile(pathname.replace(/^my-pdf\//,''));
@@ -115,6 +126,18 @@ export function createApp(options = {}) {
     const bytes=new Uint8Array(await new Response(file.stream).arrayBuffer());
     const result=await importArchive(storage,bytes);
     return c.json(presentCatalog(result,true));
+  });
+  app.post('/api/admin/catalog-direct',async c=>{
+    await requireAdminOrToken(c);
+    const rawCatalog=await c.req.json();
+    const result=await importUnpackedCatalog(storage,rawCatalog);
+    return c.json(presentCatalog(result,true));
+  });
+  app.post('/api/admin/document',async c=>{
+    await requireAdminOrToken(c);
+    const docPayload=await c.req.json();
+    const result=await addSingleDocument(storage,docPayload);
+    return c.json(presentCatalog(result,true),201);
   });
   app.notFound(c=>c.json({error:'Page introuvable.'},404));
   return app;

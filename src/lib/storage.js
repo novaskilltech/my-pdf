@@ -11,9 +11,10 @@ export class BlobStorage {
   }
   async writeJson(path, data, etag = null) {
     try {
+      const strongEtag = typeof etag === 'string' ? etag.replace(/^W\//, '') : etag;
       const result = await put(PREFIX + path, JSON.stringify(data), {
         access: 'private', addRandomSuffix: false, contentType: 'application/json',
-        allowOverwrite: Boolean(etag), ...(etag ? { ifMatch: etag } : {}),
+        allowOverwrite: Boolean(etag), ...(strongEtag ? { ifMatch: strongEtag } : {}),
         cacheControlMaxAge: 60,
       });
       return { data, etag: result.etag };
