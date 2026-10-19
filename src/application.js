@@ -8,7 +8,7 @@ import { BlobStorage } from './lib/storage.js';
 import { AppError } from './lib/errors.js';
 import { checkOrigin, clearSession, equalSecret, getAdmin, issueSession, newAuthRecord, passwordHash, rateLimit, requireAdmin, validatePassword, verifyPassword } from './lib/auth.js';
 import { changeVisibility, presentCatalog } from './lib/catalog.js';
-import { addSingleDocument, deleteSingleDocument, importArchive, importUnpackedCatalog, MAX_ARCHIVE } from './lib/import.js';
+import { addSingleDocument, deleteDocuments, deleteSingleDocument, importArchive, importUnpackedCatalog, MAX_ARCHIVE } from './lib/import.js';
 
 export function createApp(options = {}) {
   const storage = options.storage || new BlobStorage();
@@ -143,6 +143,12 @@ export function createApp(options = {}) {
   app.delete('/api/admin/documents/:id',async c=>{
     await requireAdminOrToken(c);
     const result=await deleteSingleDocument(storage,c.req.param('id'),c.req.header('x-revision'));
+    return c.json(presentCatalog(result,true));
+  });
+  app.post('/api/admin/delete-selection',async c=>{
+    await requireAdminOrToken(c);
+    const {ids,revision}=await c.req.json();
+    const result=await deleteDocuments(storage,ids,revision||c.req.header('x-revision'));
     return c.json(presentCatalog(result,true));
   });
   app.notFound(c=>c.json({error:'Page introuvable.'},404));

@@ -1,4 +1,4 @@
-import { get, put, head, BlobNotFoundError, BlobPreconditionFailedError } from '@vercel/blob';
+import { get, put, head, del, BlobNotFoundError, BlobPreconditionFailedError } from '@vercel/blob';
 import { Conflict } from './errors.js';
 
 const PREFIX = 'my-pdf/';
@@ -35,5 +35,9 @@ export class BlobStorage {
     if (await this.hasFile(path)) return;
     try { await put(PREFIX + path, bytes, { access: 'private', addRandomSuffix: false, allowOverwrite: false, contentType }); }
     catch (error) { if (!/already exists/i.test(error.message)) throw error; }
+  }
+  async deleteFile(path) {
+    try { await del(PREFIX + path); }
+    catch { /* ignore if already deleted */ }
   }
 }

@@ -95,12 +95,28 @@ export async function addSingleDocument(storage, d) {
   const updatedDocs = [doc, ...existing];
   return storage.writeJson('catalog.json', { categories, documents: updatedDocs, updated: new Date().toISOString() }, current?.etag);
 }
-export async function deleteSingleDocument(storage, id, revision) {
+export async function deleteDocuments(storage, ids, revision) {
+  if (!Array.isArray(ids) || !ids.length || ids.length > 500 || !ids.every(id => typeof id === 'string')) throw new AppError(400, 'Sélection invalide.');
   const current = await storage.readJson('catalog.json');
   const clean = e => typeof e === 'string' ? e.replace(/^W\//, '') : e;
   if (!current || (revision && clean(revision) !== clean(current.etag))) throw new Conflict();
+  const targets = new Set(ids);
   const existing = current.data.documents || [];
-  const filtered = existing.filter(d => d.id !== id);
-  if (filtered.length === existing.length) throw new AppError(404, 'Document introuvable.');
-  return storage.writeJson('catalog.json', { ...current.data, documents: filtered, updated: new Date().toISOString() }, current.etag);
+  const removed = existing.filter(d => targets.has(d.id));
+  if (!removed.length) throw new AppError(404, 'Document introuvable.');
+  const remaining = existing.filter(d => !targets.has(d.id));
+  const result = await storage.writeJson('catalog.json', { ...current.data, documents: remaining, updated: new Date().toISOString() }, current.etag);
+  if (typeof storage.deleteFile === 'function') {
+    const stillUsedFiles = new Set(remaining.flatMap(d => [d.filePath, d.coverPath]));
+    const toDelete = new Set();
+    for (const d of removed) {
+      if (d.filePath && !stillUsedFiles.has(d.filePath)) toDelete.add(d.filePath);
+      if (d.coverPath && !stillUsedFiles.has(d.coverPath)) toDelete.add(d.coverPath);
+    }
+    await Promise.all([...toDelete].map(p => storage.deleteFile(p)));
+  }
+  return result;
+}
+export async function deleteSingleDocument(storage, id, revision) {
+  return deleteDocuments(storage, [id], revision);
 }
