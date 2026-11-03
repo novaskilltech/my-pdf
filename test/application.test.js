@@ -11,7 +11,7 @@ class MemoryStorage {
   async readJson(path){return structuredClone(this.json.get(path)||null);}
   async writeJson(path,data,etag=null){const old=this.json.get(path);if((old&&old.etag!==etag)||(!old&&etag))throw new Conflict();const result={data:structuredClone(data),etag:`"v${++this.serial}"`};this.json.set(path,result);return structuredClone(result);}
   async writeFile(path,bytes){if(!this.files.has(path))this.files.set(path,Uint8Array.from(bytes));}
-  async readFile(path,range){const bytes=this.files.get(path);if(!bytes)return null;let content=bytes;const headers=new Headers();if(range){const m=range.match(/^bytes=(\d+)-(\d*)$/);if(m){const start=Number(m[1]),end=m[2]?Number(m[2]):bytes.length-1;content=bytes.slice(start,end+1);headers.set('Content-Range',`bytes ${start}-${end}/${bytes.length}`);}}return {statusCode:200,stream:new Response(content).body,headers,blob:{size:bytes.length}};}
+  async readFile(path,range){const bytes=this.files.get(path);if(!bytes)return null;let content=bytes,statusCode=200;const headers=new Headers();if(range){const m=range.match(/^bytes=(\d+)-(\d*)$/);if(m){const start=Number(m[1]),end=m[2]?Number(m[2]):bytes.length-1;content=bytes.slice(start,end+1);headers.set('Content-Range',`bytes ${start}-${end}/${bytes.length}`);statusCode=206;}}headers.set('Content-Length',String(content.length));return {statusCode,stream:new Response(content).body,headers,blob:{size:bytes.length}};}
 }
 const token='installation-test-token-with-over-32-characters';
 const password='Une phrase administrateur solide 123!';
@@ -36,7 +36,7 @@ test('hidden documents, categories, filenames and direct asset URLs are absent f
  for(const path of ['/api/admin/catalog','/api/admin/visibility','/api/admin/upload','/api/admin/import']){const get=path.endsWith('catalog');assert.equal((await guest.request(path,get?'GET':path.endsWith('visibility')?'PATCH':'POST',get?undefined:{})).status,401);}
  assert.equal((await guest.request('/my-pdf/catalog.json')).status,404);
 });
-test('share link opens PDF inline without exposing catalog, and hiding revokes the secret link immediately',async()=>{
+test('share link displays download card and serves PDF without exposing catalog; hiding revokes immediately',async()=>{
  const {admin,guest}=await fixture();let catalog=await(await admin.request('/api/admin/catalog')).json();
  const update=async visible=>{const response=await admin.request('/api/admin/visibility','PATCH',{ids:['doc-001'],visible},{'if-match':catalog.revision});assert.equal(response.status,200);catalog=await response.json();};
  await update(true);
@@ -45,11 +45,15 @@ test('share link opens PDF inline without exposing catalog, and hiding revokes t
  assert.equal((await guest.request('/api/documents/doc-001/file')).status,404);
  const shareUrl=catalog.documents[0].shareUrl;
  assert.match(shareUrl,/^\/s\/[A-Za-z0-9_-]{24}$/);
- const pdf=await guest.request(shareUrl);assert.equal(pdf.status,200);assert.match(await pdf.text(),/^%PDF-/);assert.equal(pdf.headers.get('vercel-cdn-cache-control'),'no-store');assert.match(pdf.headers.get('content-disposition'),/^inline/);
- const part=await guest.request(shareUrl,'GET',undefined,{range:'bytes=0-4'});assert.equal(part.status,206);assert.equal(await part.text(),'%PDF-');
- const download=await guest.request(shareUrl+'?download=1');assert.match(download.headers.get('content-disposition'),/^attachment/);
+ const page=await guest.request(shareUrl);assert.equal(page.status,200);assert.match(await page.text(),/Télécharger le PDF/);
+ const pdf=await guest.request(shareUrl+'/file');assert.equal(pdf.status,200);assert.match(await pdf.text(),/^%PDF-/);assert.equal(pdf.headers.get('vercel-cdn-cache-control'),'no-store');
+ const part=await guest.request(shareUrl+'/file','GET',undefined,{range:'bytes=0-4'});assert.equal(part.status,206);assert.equal(await part.text(),'%PDF-');
+ const download=await guest.request(shareUrl+'/file?download=1');assert.match(download.headers.get('content-disposition'),/^attachment/);
  await update(false);
- for(const method of ['GET','HEAD'])assert.equal((await guest.request(shareUrl,method)).status,404);
+ for(const method of ['GET','HEAD']){
+   assert.equal((await guest.request(shareUrl,method)).status,404);
+   assert.equal((await guest.request(shareUrl+'/file',method)).status,404);
+ }
  assert.equal((await admin.request('/api/documents/doc-001/file')).status,200);
 });
 test('stale revisions cannot overwrite changes, and public callers cannot publish',async()=>{

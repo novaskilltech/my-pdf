@@ -10,6 +10,50 @@ import { checkOrigin, clearSession, equalSecret, getAdmin, issueSession, newAuth
 import { changeVisibility, isSharedDocument, presentCatalog } from './lib/catalog.js';
 import { addSingleDocument, deleteDocuments, deleteSingleDocument, importArchive, importUnpackedCatalog, MAX_ARCHIVE } from './lib/import.js';
 
+const escapeHtml = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const formatBytes = b => !b ? '' : b >= 1024 * 1024 ? `${(b / (1024 * 1024)).toFixed(1).replace('.', ',')} Mo` : `${Math.max(1, Math.round(b / 1024))} Ko`;
+
+function renderSharePage(d, token) {
+  const title = escapeHtml(d.title);
+  const filename = escapeHtml(d.filename);
+  const meta = [d.pages ? `${d.pages} page${d.pages > 1 ? 's' : ''}` : '', formatBytes(d.size), d.language ? escapeHtml(d.language) : ''].filter(Boolean).join(' · ');
+  return `<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>${title} · Téléchargement PDF</title>
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="theme-color" content="#203f35">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:#f4f4ed;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1d2e26}
+    .card{max-width:440px;width:100%;background:#fff;border:1px solid #d8ddd4;border-radius:16px;padding:32px 26px;text-align:center;box-shadow:0 12px 32px rgba(24,42,34,.08)}
+    .cover{width:150px;height:212px;object-fit:cover;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.14);margin:0 auto 20px;display:block;background:#eef3ec}
+    .badge{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#203f35;background:#eef6e8;padding:4px 10px;border-radius:99px;margin-bottom:10px}
+    h1{font-size:20px;line-height:1.35;margin:0 0 8px;color:#1d2e26;word-break:break-word}
+    .meta{font-size:13px;color:#647268;margin:0 0 24px}
+    .btn-download{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:14px 20px;border-radius:10px;background:#203f35;color:#fff;font-weight:700;font-size:15px;text-decoration:none;transition:background .15s}
+    .btn-download:hover{background:#173028}
+    .btn-open{display:inline-block;margin-top:14px;font-size:13px;color:#49584e;text-decoration:underline}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <img class="cover" src="/s/${escapeHtml(token)}/cover" alt="${title}" width="150" height="212">
+    <span class="badge">Document PDF</span>
+    <h1 dir="auto">${title}</h1>
+    <p class="meta">${meta}</p>
+    <a class="btn-download" href="/s/${escapeHtml(token)}/file?download=1" download="${filename}">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></svg>
+      Télécharger le PDF
+    </a>
+    <a class="btn-open" href="/s/${escapeHtml(token)}/file" target="_blank" rel="noopener">Ouvrir directement dans le navigateur ↗</a>
+  </main>
+</body>
+</html>`;
+}
+
 export function createApp(options = {}) {
   const storage = options.storage || new BlobStorage();
   const setupToken = options.setupToken ?? process.env.ADMIN_SETUP_TOKEN ?? '';
@@ -94,14 +138,25 @@ export function createApp(options = {}) {
   async function streamDocumentAsset(c, d, asset) {
     const range=c.req.header('range');if(range&&!/^bytes=(?:\d+-\d*|-\d+)$/.test(range))throw new AppError(416,'Plage de lecture invalide.');
     const file=await storage.readFile(asset==='file'?d.filePath:d.coverPath,range);
-    if(!file||file.statusCode!==200)throw new AppError(404,'Document introuvable.');
+    if(!file||![200,206].includes(file.statusCode))throw new AppError(404,'Document introuvable.');
     c.header('Content-Type',asset==='file'?'application/pdf':'image/jpeg');
     if(asset==='file')c.header('Content-Disposition',`${c.req.query('download')==='1'?'attachment':'inline'}; filename="document.pdf"; filename*=UTF-8''${encodeURIComponent(d.filename).replace(/['()*]/g,ch=>'%'+ch.charCodeAt(0).toString(16))}`);
     const contentRange=file.headers?.get('content-range');
     if(contentRange)c.header('Content-Range',contentRange);
+    const contentLength=file.headers?.get('content-length')||(!contentRange&&file.blob?.size?String(file.blob.size):null);
+    if(contentLength)c.header('Content-Length',contentLength);
     c.header('Accept-Ranges','bytes');
-    if(c.req.method==='HEAD'){await file.stream.cancel();return c.body(null,contentRange?206:200);}
-    return c.body(file.stream,contentRange?206:200);
+    const status=(contentRange||file.statusCode===206)?206:200;
+    if(c.req.method==='HEAD'){await file.stream.cancel();return c.body(null,status);}
+    return c.body(file.stream,status);
+  }
+
+  async function findSharedDoc(token) {
+    if(typeof token!=='string'||!/^[A-Za-z0-9_-]{16,64}$/.test(token))throw new AppError(404,'Document introuvable.');
+    const catalog=await storage.readJson('catalog.json');
+    const d=catalog?.data.documents.find(doc=>isSharedDocument(doc)&&doc.shareToken===token);
+    if(!d)throw new AppError(404,'Document introuvable.');
+    return d;
   }
 
   app.on(['GET','HEAD'],'/api/documents/:id/:asset',async c=>{
@@ -113,13 +168,19 @@ export function createApp(options = {}) {
     return streamDocumentAsset(c, d, asset);
   });
 
-  app.on(['GET','HEAD'],['/s/:token','/s/:token/:filename'],async c=>{
+  app.on(['GET','HEAD'],'/s/:token',async c=>{
     const token=c.req.param('token');
-    if(typeof token!=='string'||!/^[A-Za-z0-9_-]{16,64}$/.test(token))throw new AppError(404,'Document introuvable.');
-    const catalog=await storage.readJson('catalog.json');
-    const d=catalog?.data.documents.find(doc=>isSharedDocument(doc)&&doc.shareToken===token);
-    if(!d)throw new AppError(404,'Document introuvable.');
-    return streamDocumentAsset(c, d, 'file');
+    const d=await findSharedDoc(token);
+    if(c.req.query('download')==='1'||c.req.query('raw')==='1')return streamDocumentAsset(c, d, 'file');
+    if(c.req.method==='HEAD')return c.body(null,200);
+    return c.html(renderSharePage(d, token));
+  });
+
+  app.on(['GET','HEAD'],'/s/:token/:asset',async c=>{
+    const asset=c.req.param('asset');
+    if(!['file','cover'].includes(asset))throw new AppError(404,'Document introuvable.');
+    const d=await findSharedDoc(c.req.param('token'));
+    return streamDocumentAsset(c, d, asset);
   });
 
   app.post('/api/admin/upload',async c=>{
