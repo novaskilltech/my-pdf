@@ -1,6 +1,7 @@
 import { unzipSync } from 'fflate';
 import { createHash } from 'node:crypto';
-import { AppError } from './errors.js';
+import { AppError, Conflict } from './errors.js';
+import { newShareToken } from './catalog.js';
 
 export const MAX_ARCHIVE = 180 * 1024 * 1024;
 const MAX_EXPANDED = 230 * 1024 * 1024;
@@ -16,7 +17,7 @@ export function validateCatalogPayload(catalog) {
   const documents = catalog.documents.map((d,i) => {
     if (!/^doc-[a-z0-9-]{1,60}$/.test(d.id) || ids.has(d.id) || !categoryIds.has(d.category) || !string(d.title,300) || !string(d.filename,300) || !/^pdf\/[a-f0-9]{20}\.pdf$/.test(d.url) || !/^covers\/[a-f0-9]{20}\.jpg$/.test(d.cover)) throw new AppError(400, 'Document invalide dans le catalogue.');
     ids.add(d.id);used.add(d.url);used.add(d.cover);
-    return { id:d.id,title:d.title,author:typeof d.author==='string'?d.author.slice(0,160):'',category:d.category,language:typeof d.language==='string'?d.language.slice(0,16):'FR',edition:typeof d.edition==='string'?d.edition.slice(0,150):'',filename:d.filename.replace(/[\r\n]/g,''),date:/^\d{4}-\d{2}-\d{2}$/.test(d.date)?d.date:new Date().toISOString().slice(0,10),pages:Number.isInteger(d.pages)&&d.pages>0?d.pages:1,size:Number.isInteger(d.size)&&d.size>0?d.size:0,originalIndex:Number.isInteger(d.originalIndex)?d.originalIndex:i,searchText:typeof d.searchText==='string'?d.searchText.slice(0,2500):'',filePath:d.url,coverPath:d.cover,visible:false };
+    return { id:d.id,title:d.title,author:typeof d.author==='string'?d.author.slice(0,160):'',category:d.category,language:typeof d.language==='string'?d.language.slice(0,16):'FR',edition:typeof d.edition==='string'?d.edition.slice(0,150):'',filename:d.filename.replace(/[\r\n]/g,''),date:/^\d{4}-\d{2}-\d{2}$/.test(d.date)?d.date:new Date().toISOString().slice(0,10),pages:Number.isInteger(d.pages)&&d.pages>0?d.pages:1,size:Number.isInteger(d.size)&&d.size>0?d.size:0,originalIndex:Number.isInteger(d.originalIndex)?d.originalIndex:i,searchText:typeof d.searchText==='string'?d.searchText.slice(0,2500):'',filePath:d.url,coverPath:d.cover,visible:false,shareToken:null };
   });
   return { categories, documents, used:[...used] };
 }
@@ -47,7 +48,11 @@ export function parseArchive(bytes) {
 async function mergeCatalog(storage, categories, documents) {
   const current = await storage.readJson('catalog.json');
   const old = new Map((current?.data.documents||[]).map(d=>[d.id,d]));
-  const mergedDocs=documents.map(d=>({ ...d,visible:old.get(d.id)?.filePath===d.filePath&&old.get(d.id)?.visible===true }));
+  const mergedDocs=documents.map(d=>{
+    const prev = old.get(d.id);
+    const keepVisible = prev?.filePath===d.filePath && prev?.visible===true;
+    return { ...d, visible: keepVisible, shareToken: keepVisible ? (prev?.shareToken || newShareToken()) : null };
+  });
   const newIds=new Set(mergedDocs.map(d=>d.id));
   mergedDocs.push(...[...old.values()].filter(d=>!newIds.has(d.id)));
   const categoryMap=new Map((current?.data.categories||[]).map(c=>[c.id,c]));categories.forEach(c=>categoryMap.set(c.id,c));
@@ -75,6 +80,7 @@ export async function addSingleDocument(storage, d) {
   const id = /^doc-[a-z0-9-]{1,60}$/.test(d.id) && !existing.some(x => x.id === d.id)
     ? d.id
     : `doc-${hash.slice(0, 12)}-${Date.now().toString(36)}`;
+  const visible = Boolean(d.visible);
   const doc = {
     id,
     title: d.title.trim(),
@@ -90,7 +96,8 @@ export async function addSingleDocument(storage, d) {
     searchText: typeof d.searchText === 'string' ? d.searchText.slice(0, 2500) : `${d.title} ${d.author || ''} ${d.filename}`.slice(0, 2500),
     filePath: d.url,
     coverPath: d.cover,
-    visible: Boolean(d.visible),
+    visible,
+    shareToken: visible ? newShareToken() : null,
   };
   const updatedDocs = [doc, ...existing];
   return storage.writeJson('catalog.json', { categories, documents: updatedDocs, updated: new Date().toISOString() }, current?.etag);

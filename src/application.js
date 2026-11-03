@@ -7,7 +7,7 @@ import { handleUploadPresigned } from '@vercel/blob/client';
 import { BlobStorage } from './lib/storage.js';
 import { AppError } from './lib/errors.js';
 import { checkOrigin, clearSession, equalSecret, getAdmin, issueSession, newAuthRecord, passwordHash, rateLimit, requireAdmin, validatePassword, verifyPassword } from './lib/auth.js';
-import { changeVisibility, presentCatalog } from './lib/catalog.js';
+import { changeVisibility, isSharedDocument, presentCatalog } from './lib/catalog.js';
 import { addSingleDocument, deleteDocuments, deleteSingleDocument, importArchive, importUnpackedCatalog, MAX_ARCHIVE } from './lib/import.js';
 
 export function createApp(options = {}) {
@@ -22,11 +22,11 @@ export function createApp(options = {}) {
     if (c.req.path === '/api/admin/catalog-direct') return next();
     return bodyLimit({maxSize:65536,onError:()=>{throw new AppError(413,'Requête trop volumineuse.');}})(c, next);
   });
-  app.use('/api/*', async (c,next) => {
+  const securityGuard = async (c,next) => {
     c.header('Cache-Control','private, no-store, max-age=0');
     c.header('CDN-Cache-Control','no-store');c.header('Vercel-CDN-Cache-Control','no-store');
     c.header('X-Content-Type-Options','nosniff');c.header('Referrer-Policy','no-referrer');
-    c.header('X-Frame-Options','SAMEORIGIN');
+    c.header('X-Frame-Options','SAMEORIGIN');c.header('X-Robots-Tag','noindex, nofollow, noarchive');
     if (!configured) throw new AppError(503,'Le stockage privé doit être connecté avant de pouvoir utiliser la collection.');
     if (!['GET','HEAD'].includes(c.req.method)) {
       const maxLen = c.req.path === '/api/admin/catalog-direct' ? 5 * 1024 * 1024 : 65536;
@@ -34,7 +34,10 @@ export function createApp(options = {}) {
       checkOrigin(c);
     }
     await next();
-  });
+  };
+  app.use('/api/*', securityGuard);
+  app.use('/s/*', securityGuard);
+
   app.onError((error,c) => {
     if(error instanceof SyntaxError)error=new AppError(400,'La requête est illisible.');
     const status=error instanceof AppError?error.status:503;
@@ -48,7 +51,10 @@ export function createApp(options = {}) {
   app.get('/',async c=>c.html(await readFile(new URL('../public/index.html',import.meta.url),'utf8')));
   app.get('/admin',async c=>{c.header('Cache-Control','no-store');return c.html(await readFile(new URL('../public/admin.html',import.meta.url),'utf8'));});
   app.get('/blob-upload.js',async c=>{c.header('Content-Type','application/javascript; charset=utf-8');return c.body(await readFile(new URL('../public/blob-upload.js',import.meta.url),'utf8'));});
-  app.get('/api/catalog',async c=>c.json(presentCatalog(await storage.readJson('catalog.json'))));
+  app.get('/api/catalog',async c=>{
+    const isAdmin=Boolean(await getAdmin(c,storage));
+    return c.json(presentCatalog(await storage.readJson('catalog.json'),isAdmin));
+  });
   app.get('/api/auth/status',async c=>{
     const record=await storage.readJson('auth.json');
     return c.json({initialized:Boolean(record),authenticated:Boolean(await getAdmin(c,storage)),setupAvailable:setupToken.length>=32});
@@ -85,11 +91,7 @@ export function createApp(options = {}) {
     return c.json(presentCatalog(result,true));
   });
 
-  app.on(['GET','HEAD'],'/api/documents/:id/:asset',async c=>{
-    const asset=c.req.param('asset');if(!['file','cover'].includes(asset))throw new AppError(404,'Document introuvable.');
-    const catalog=await storage.readJson('catalog.json');
-    const d=catalog?.data.documents.find(d=>d.id===c.req.param('id'));
-    if(!d||(d.visible!==true&&!await getAdmin(c,storage)))throw new AppError(404,'Document introuvable.');
+  async function streamDocumentAsset(c, d, asset) {
     const range=c.req.header('range');if(range&&!/^bytes=(?:\d+-\d*|-\d+)$/.test(range))throw new AppError(416,'Plage de lecture invalide.');
     const file=await storage.readFile(asset==='file'?d.filePath:d.coverPath,range);
     if(!file||file.statusCode!==200)throw new AppError(404,'Document introuvable.');
@@ -100,7 +102,26 @@ export function createApp(options = {}) {
     c.header('Accept-Ranges','bytes');
     if(c.req.method==='HEAD'){await file.stream.cancel();return c.body(null,contentRange?206:200);}
     return c.body(file.stream,contentRange?206:200);
+  }
+
+  app.on(['GET','HEAD'],'/api/documents/:id/:asset',async c=>{
+    const asset=c.req.param('asset');if(!['file','cover'].includes(asset))throw new AppError(404,'Document introuvable.');
+    if(!await getAdmin(c,storage))throw new AppError(404,'Document introuvable.');
+    const catalog=await storage.readJson('catalog.json');
+    const d=catalog?.data.documents.find(d=>d.id===c.req.param('id'));
+    if(!d)throw new AppError(404,'Document introuvable.');
+    return streamDocumentAsset(c, d, asset);
   });
+
+  app.on(['GET','HEAD'],['/s/:token','/s/:token/:filename'],async c=>{
+    const token=c.req.param('token');
+    if(typeof token!=='string'||!/^[A-Za-z0-9_-]{16,64}$/.test(token))throw new AppError(404,'Document introuvable.');
+    const catalog=await storage.readJson('catalog.json');
+    const d=catalog?.data.documents.find(doc=>isSharedDocument(doc)&&doc.shareToken===token);
+    if(!d)throw new AppError(404,'Document introuvable.');
+    return streamDocumentAsset(c, d, 'file');
+  });
+
   app.post('/api/admin/upload',async c=>{
     await requireAdminOrToken(c);
     const body=await c.req.json();

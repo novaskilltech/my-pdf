@@ -97,6 +97,9 @@
   async function init(){
     try{
       const response=await fetch('/api/catalog',{cache:'no-store'});if(!response.ok)throw Error('Catalogue indisponible');catalog=await response.json();
+      if(catalog.private){return;}
+      if($('private-gate'))$('private-gate').style.display='none';
+      $('sidebar').hidden=false;$('workspace').hidden=false;document.title='Mes PDF · NovaSkillTech';
       docsById=new Map(catalog.documents.map(d=>[d.id,d]));catsById=new Map(catalog.categories.map(c=>[c.id,c]));
       $('all-count').textContent=catalog.documents.length;$('total-stat').textContent=catalog.documents.length;$('category-count').textContent=catalog.categories.length;
       $('theme-stat').textContent=catalog.categories.length;
@@ -104,7 +107,7 @@
       const featured=filterDocuments(catalog.documents,{sort:'recent'})[0];
       if(featured){$('featured-cover').src=featured.cover;$('featured-title').textContent=featured.title;document.querySelector('.featured-kicker').textContent=catsById.get(featured.category).name;document.querySelector('.featured-copy>p:not(.featured-kicker)').textContent=featured.author;document.querySelector('.featured-edition').textContent=featured.edition+' · '+featured.language;$('featured-open').onclick=()=>openReader(featured.id);}
       render();
-    }catch(error){$('featured').hidden=true;$('results').innerHTML='<div class="empty"><h3>La collection n’a pas pu être chargée.</h3><p>Vérifie ta connexion puis recharge la page.</p><button id="reload">Réessayer</button></div>';$('reload').addEventListener('click',()=>location.reload());}
+    }catch(error){/* Keep private gate visible on error */}
   }
   init();
 })();

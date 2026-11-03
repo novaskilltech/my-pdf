@@ -2,16 +2,24 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Mes PDF · NovaSkillTech</title>
-  <meta name="description" content="Livres, guides et documents PDF publiés par NovaSkillTech, classés par thème.">
-  <meta name="theme-color" content="#203f35"><meta name="robots" content="noindex,nofollow">
+  <title>Espace privé</title>
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="theme-color" content="#203f35">
   <link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="styles.css">
   <script src="catalog-core.js" defer></script><script src="app.js" defer></script>
 </head>
 <body>
-  <a class="skip" href="#catalogue">Aller aux documents</a>
+  <div id="private-gate" style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:#f4f4ed">
+    <div style="max-width:420px;width:100%;background:#fff;border:1px solid #d8ddd4;border-radius:14px;padding:36px 28px;text-align:center;box-shadow:0 8px 24px rgba(24,42,34,.06)">
+      <div style="width:48px;height:48px;margin:0 auto 16px;border-radius:50%;background:#eef3ec;color:#203f35;display:flex;align-items:center;justify-content:center" data-icon="lock"></div>
+      <h1 style="font-size:22px;margin:0 0 10px;color:#1d2e26">Espace privé</h1>
+      <p style="font-size:14px;line-height:1.55;color:#5d6b61;margin:0 0 24px">L’accès à ce serveur est restreint. Si un document PDF vous a été partagé, veuillez utiliser directement le lien complet qui vous a été transmis.</p>
+      <a href="/admin" class="primary-button" style="display:inline-flex;align-items:center;gap:8px;text-decoration:none;padding:10px 18px;border-radius:8px;background:#203f35;color:#fff;font-weight:600;font-size:14px">Accès propriétaire</a>
+    </div>
+  </div>
+  <a class="skip" href="#catalogue" hidden>Aller aux documents</a>
   <div class="shade" id="shade" hidden></div>
-  <aside class="sidebar" id="sidebar" aria-label="Navigation des documents">
+  <aside class="sidebar" id="sidebar" aria-label="Navigation des documents" hidden>
     <a class="brand" href="./" aria-label="Mes PDF, accueil"><span class="brand-mark" data-icon="book"></span><span>mes<span class="brand-serif">pdf.</span><small>NOVASKILLTECH</small></span></a>
     <button class="close-nav icon-button" id="close-nav" aria-label="Fermer le menu" data-icon="close"></button>
     <div class="sidebar-label">LA COLLECTION</div>
@@ -23,7 +31,7 @@
     <nav id="category-nav" class="category-nav" aria-label="Thèmes des documents"></nav>
     <div class="sidebar-bottom"><span class="avatar">SE</span><div><strong>Salah Eddine</strong><small>Livres & ressources</small></div><span data-icon="lock"></span></div>
   </aside>
-  <div class="workspace">
+  <div class="workspace" id="workspace" hidden>
     <header class="topbar">
       <div class="topbar-left"><button class="menu-toggle icon-button" id="menu-toggle" aria-label="Ouvrir les catégories" aria-expanded="false" aria-controls="sidebar" data-icon="menu"></button><span class="crumb">Bibliothèque <span>/</span> <strong id="breadcrumb">Tous les documents</strong></span></div>
       <a class="private" href="/admin"><span data-icon="lock"></span>Administration</a>
@@ -44,6 +52,5 @@
     </main>
   </div>
   <dialog id="reader" aria-labelledby="reader-title"><div class="reader-header"><div><span class="eyebrow" id="reader-category"></span><h2 id="reader-title"></h2><p id="reader-meta"></p></div><button class="icon-button" id="reader-close" aria-label="Fermer le lecteur" data-icon="close"></button></div><div class="reader-actions"><a id="reader-download" class="primary-button" download><span data-icon="download"></span>Télécharger</a><a id="reader-tab" class="outline-button" target="_blank" rel="noopener">Ouvrir dans un onglet <span data-icon="external"></span></a></div><p class="reader-help">Si l’aperçu ne s’affiche pas sur ton téléphone, ouvre le PDF dans un nouvel onglet.</p><iframe id="reader-frame" title="Aperçu du document PDF"></iframe><details class="file-details"><summary>Nom du fichier original</summary><p id="reader-filename"></p></details></dialog>
-  <noscript><p class="noscript">Active JavaScript pour parcourir les documents et utiliser les filtres.</p></noscript>
 </body>
 </html>

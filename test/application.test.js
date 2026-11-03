@@ -31,20 +31,25 @@ test('setup requires a secret, a strong password and same-origin JSON; can happe
  assert.equal((await c.request('/api/auth/status')).status,200);
 });
 test('hidden documents, categories, filenames and direct asset URLs are absent for public visitors',async()=>{
- const {admin,guest}=await fixture();const body=await(await guest.request('/api/catalog')).json();assert.deepEqual(body.documents,[]);assert.deepEqual(body.categories,[]);assert.ok(!JSON.stringify(body).includes('Document privé'));
+ const {admin,guest}=await fixture();const body=await(await guest.request('/api/catalog')).json();assert.deepEqual(body.documents,[]);assert.deepEqual(body.categories,[]);assert.equal(body.private,true);assert.ok(!JSON.stringify(body).includes('Document privé'));
  for(const asset of ['file','cover']){const response=await guest.request(`/api/documents/doc-001/${asset}`);assert.equal(response.status,404);assert.match(response.headers.get('cache-control'),/no-store/);assert.equal((await admin.request(`/api/documents/doc-001/${asset}`)).status,200);}
  for(const path of ['/api/admin/catalog','/api/admin/visibility','/api/admin/upload','/api/admin/import']){const get=path.endsWith('catalog');assert.equal((await guest.request(path,get?'GET':path.endsWith('visibility')?'PATCH':'POST',get?undefined:{})).status,401);}
  assert.equal((await guest.request('/my-pdf/catalog.json')).status,404);
 });
-test('publish then hide immediately revokes metadata, thumbnails and old PDF links for GET and HEAD',async()=>{
+test('share link opens PDF inline without exposing catalog, and hiding revokes the secret link immediately',async()=>{
  const {admin,guest}=await fixture();let catalog=await(await admin.request('/api/admin/catalog')).json();
  const update=async visible=>{const response=await admin.request('/api/admin/visibility','PATCH',{ids:['doc-001'],visible},{'if-match':catalog.revision});assert.equal(response.status,200);catalog=await response.json();};
- await update(true);const publicCatalog=await(await guest.request('/api/catalog')).json();assert.equal(publicCatalog.documents.length,1);assert.equal(publicCatalog.categories.length,1);assert.equal(publicCatalog.documents[0].filePath,undefined);assert.equal(publicCatalog.revision,undefined);
- const pdf=await guest.request(publicCatalog.documents[0].url);assert.equal(pdf.status,200);assert.match(await pdf.text(),/^%PDF-/);assert.equal(pdf.headers.get('vercel-cdn-cache-control'),'no-store');
- const part=await guest.request('/api/documents/doc-001/file','GET',undefined,{range:'bytes=0-4'});assert.equal(part.status,206);assert.equal(await part.text(),'%PDF-');
- const download=await guest.request('/api/documents/doc-001/file?download=1');assert.match(download.headers.get('content-disposition'),/^attachment/);
- await update(false);assert.equal((await(await guest.request('/api/catalog')).json()).documents.length,0);
- for(const asset of ['file','cover'])for(const method of ['GET','HEAD'])assert.equal((await guest.request(`/api/documents/doc-001/${asset}`,method)).status,404);
+ await update(true);
+ const guestCatalog=await(await guest.request('/api/catalog')).json();
+ assert.equal(guestCatalog.documents.length,0);assert.equal(guestCatalog.private,true);
+ assert.equal((await guest.request('/api/documents/doc-001/file')).status,404);
+ const shareUrl=catalog.documents[0].shareUrl;
+ assert.match(shareUrl,/^\/s\/[A-Za-z0-9_-]{24}$/);
+ const pdf=await guest.request(shareUrl);assert.equal(pdf.status,200);assert.match(await pdf.text(),/^%PDF-/);assert.equal(pdf.headers.get('vercel-cdn-cache-control'),'no-store');assert.match(pdf.headers.get('content-disposition'),/^inline/);
+ const part=await guest.request(shareUrl,'GET',undefined,{range:'bytes=0-4'});assert.equal(part.status,206);assert.equal(await part.text(),'%PDF-');
+ const download=await guest.request(shareUrl+'?download=1');assert.match(download.headers.get('content-disposition'),/^attachment/);
+ await update(false);
+ for(const method of ['GET','HEAD'])assert.equal((await guest.request(shareUrl,method)).status,404);
  assert.equal((await admin.request('/api/documents/doc-001/file')).status,200);
 });
 test('stale revisions cannot overwrite changes, and public callers cannot publish',async()=>{
@@ -53,7 +58,7 @@ test('stale revisions cannot overwrite changes, and public callers cannot publis
  assert.equal((await admin.request('/api/admin/visibility','PATCH',body,{'if-match':revision,origin:'https://evil.test'})).status,403);
  assert.equal((await admin.request('/api/admin/visibility','PATCH',body,{'if-match':revision})).status,200);
  assert.equal((await admin.request('/api/admin/visibility','PATCH',{...body,visible:false},{'if-match':revision})).status,409);
- assert.equal((await(await guest.request('/api/catalog')).json()).documents.length,1);
+ assert.equal((await(await admin.request('/api/catalog')).json()).documents[0].visible,true);
 });
 test('forged sessions are denied; password changes revoke old sessions and old password',async()=>{
  const {app,admin,guest}=await fixture();const previous=admin.cookie;guest.cookie=previous.slice(0,-4)+'fake';assert.equal((await guest.request('/api/admin/catalog')).status,401);
