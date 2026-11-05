@@ -59,7 +59,14 @@ export function createApp(options = {}) {
   const setupToken = options.setupToken ?? process.env.ADMIN_SETUP_TOKEN ?? '';
   const configured = options.configured ?? Boolean(process.env.BLOB_STORE_ID || process.env.BLOB_READ_WRITE_TOKEN);
   const app = new Hono();
-  const requireAdminOrToken = async c => requireAdmin(c, storage);
+  const hasSetupToken = c => {
+    const headerToken = c.req.header('x-setup-token');
+    return Boolean(headerToken && setupToken.length >= 32 && equalSecret(headerToken, setupToken));
+  };
+  const requireAdminOrToken = async c => {
+    if (hasSetupToken(c)) return { data: { role: 'admin' } };
+    return requireAdmin(c, storage);
+  };
 
   app.use('/api/admin/catalog-direct', bodyLimit({maxSize:5*1024*1024,onError:()=>{throw new AppError(413,'Catalogue trop volumineux.');}}));
   app.use('/api/*', async (c,next) => {
@@ -96,7 +103,7 @@ export function createApp(options = {}) {
   app.get('/admin',async c=>{c.header('Cache-Control','no-store');return c.html(await readFile(new URL('../public/admin.html',import.meta.url),'utf8'));});
   app.get('/blob-upload.js',async c=>{c.header('Content-Type','application/javascript; charset=utf-8');return c.body(await readFile(new URL('../public/blob-upload.js',import.meta.url),'utf8'));});
   app.get('/api/catalog',async c=>{
-    const isAdmin=Boolean(await getAdmin(c,storage));
+    const isAdmin=hasSetupToken(c)||Boolean(await getAdmin(c,storage));
     return c.json(presentCatalog(await storage.readJson('catalog.json'),isAdmin));
   });
   app.get('/api/auth/status',async c=>{
@@ -161,7 +168,7 @@ export function createApp(options = {}) {
 
   app.on(['GET','HEAD'],'/api/documents/:id/:asset',async c=>{
     const asset=c.req.param('asset');if(!['file','cover'].includes(asset))throw new AppError(404,'Document introuvable.');
-    if(!await getAdmin(c,storage))throw new AppError(404,'Document introuvable.');
+    if(!hasSetupToken(c)&&!await getAdmin(c,storage))throw new AppError(404,'Document introuvable.');
     const catalog=await storage.readJson('catalog.json');
     const d=catalog?.data.documents.find(d=>d.id===c.req.param('id'));
     if(!d)throw new AppError(404,'Document introuvable.');
@@ -193,7 +200,7 @@ export function createApp(options = {}) {
       const isCover = /^my-pdf\/covers\/[a-f0-9]{20}\.jpg$/.test(pathname);
       if(!isZip && !isPdf && !isCover)throw new AppError(400,'Chemin de transfert invalide.');
       const allowedContentTypes = isZip ? ['application/zip','application/x-zip-compressed'] : isPdf ? ['application/pdf'] : ['image/jpeg'];
-      const maxSize = isZip ? MAX_ARCHIVE : isPdf ? 30 * 1024 * 1024 : 3 * 1024 * 1024;
+      const maxSize = isZip ? MAX_ARCHIVE : isPdf ? 100 * 1024 * 1024 : 3 * 1024 * 1024;
       const constraints={pathname,operations:['put'],allowedContentTypes,maximumSizeInBytes:maxSize,validUntil:Date.now()+60*60*1000};
       const token=await issueSignedToken(constraints);
       return {token,urlOptions:{access:'private',addRandomSuffix:false,allowOverwrite:Boolean(isPdf||isCover),allowedContentTypes:constraints.allowedContentTypes,maximumSizeInBytes:maxSize}};
